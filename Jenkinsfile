@@ -102,7 +102,7 @@ podTemplate(name: podName,
                                     ])
                                 }
                                 // Execute run skt
-                                executeInContainer(currentStage, "skt", "ls -la")
+                                executeInContainer(currentStage, "skt", "python ./skt/skt.py --help")
                             }
                         } catch (e) {
                             // Set build result
@@ -117,7 +117,7 @@ podTemplate(name: podName,
 
                         } finally {
                             currentBuild.displayName = "Build#: ${env.BUILD_NUMBER}"
-                            currentBuild.description = currentBuild.result
+                            currentBuild.description = "Result: ${currentBuild.currentResult}"
                         }
                     }
                 }
