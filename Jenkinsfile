@@ -9,6 +9,15 @@ env.SLAVE_TAG = env.SLAVE_TAG ?: 'stable'
 env.DOCKER_REPO_URL = env.DOCKER_REPO_URL ?: 'docker-registry.default.svc:5000'
 env.OPENSHIFT_NAMESPACE = env.OPENSHIFT_NAMESPACE ?: 'continuous-infra'
 env.OPENSHIFT_SERVICE_ACCOUNT = env.OPENSHIFT_SERVICE_ACCOUNT ?: 'jenkins'
+
+// Execution ID for this run of the pipeline
+executionID = UUID.randomUUID().toString()
+
+// Pod name to use
+podName = 'ark-' + executionID
+
+
+// Existing skt vars from Dzickus Jenkinsfile
 def sktrc
 def lockfile = "/home/worker/.sktrh7.lock"
 def cfgfile = "kconf"
@@ -35,75 +44,85 @@ podTemplate(name: podName,
         namespace: OPENSHIFT_NAMESPACE,
 
         containers: [
+                // This adds the custom slave container to the pod. Must be first with name 'jnlp'
+                containerTemplate(name: 'jnlp',
+                        image: DOCKER_REPO_URL + '/' + OPENSHIFT_NAMESPACE + '/jenkins-provisioning-slave:' + SLAVE_TAG,
+                        ttyEnabled: false,
+                        args: '${computer.jnlpmac} ${computer.name}',
+                        envVars: [
+                                envVar(key: 'GIT_SSL_NO_VERIFY', value: 'true')
+                        ],
+                        command: '',
+                        workingDir: '/workDir'),
                 // This adds the rpmbuild test container to the pod.
                 containerTemplate(name: 'skt',
                         alwaysPullImage: true,
-                        image: DOCKER_REPO_URL + '/' + OPENSHIFT_NAMESPACE + '/skt:' + SKTBUILD_TAG,
+                        image: DOCKER_REPO_URL + '/' + OPENSHIFT_NAMESPACE + '/skt:' + SKT_TAG,
                         ttyEnabled: true,
                         command: 'cat',
                         privileged: true,
                         workingDir: '/workDir'),
         ],
         volumes: [emptyDirVolume(memory: false, mountPath: '/sys/class/net')])
-{
-    node(podName) {
+        {
+            node(podName) {
 
-        def currentStage = ""
+                def currentStage = ""
 
-        ansiColor('xterm') {
-            timestamps {
-                // We need to set env.HOME because the openshift slave image
-                // forces this to /home/jenkins and then ~ expands to that
-                // even though id == "root"
-                // See https://github.com/openshift/jenkins/blob/master/slave-base/Dockerfile#L5
-                //
-                // Even the kubernetes plugin will create a pod with containers
-                // whose $HOME env var will be its workingDir
-                // See https://github.com/jenkinsci/kubernetes-plugin/blob/master/src/main/java/org/csanchez/jenkins/plugins/kubernetes/KubernetesLauncher.java#L311
-                //
-                env.HOME = "/root"
-                //
-                try {
-                    // Set our current stage value
-                    currentStage = "run-skt"
-                    stage(currentStage) {
+                ansiColor('xterm') {
+                    timestamps {
+                        // We need to set env.HOME because the openshift slave image
+                        // forces this to /home/jenkins and then ~ expands to that
+                        // even though id == "root"
+                        // See https://github.com/openshift/jenkins/blob/master/slave-base/Dockerfile#L5
+                        //
+                        // Even the kubernetes plugin will create a pod with containers
+                        // whose $HOME env var will be its workingDir
+                        // See https://github.com/jenkinsci/kubernetes-plugin/blob/master/src/main/java/org/csanchez/jenkins/plugins/kubernetes/KubernetesLauncher.java#L311
+                        //
+                        env.HOME = "/root"
+                        //
+                        try {
+                            // Set our current stage value
+                            currentStage = "run-skt"
+                            stage(currentStage) {
 
-                        // SCM
-                        dir('skt') {
-                            // Checkout out skt
-                            checkout([$class: 'GitSCM', branches: [[name: env.ghprbActualCommit]],
-                                      doGenerateSubmoduleConfigurations: false,
-                                      extensions                       : [],
-                                      submoduleCfg                     : [],
-                                      userRemoteConfigs                : [
-                                              [refspec:
-                                                       '+refs/heads/*:refs/remotes/origin/*  +refs/pull/*:refs/remotes/origin/pr/* ',
-                                               url: "${env.ghprbGhRepository}"]
-                                      ]
-                            ])
+                                // SCM
+                                dir('skt') {
+                                    // Checkout out skt
+                                    checkout([$class: 'GitSCM', branches: [[name: env.ghprbActualCommit]],
+                                              doGenerateSubmoduleConfigurations: false,
+                                              extensions                       : [],
+                                              submoduleCfg                     : [],
+                                              userRemoteConfigs                : [
+                                                      [refspec:
+                                                               '+refs/heads/*:refs/remotes/origin/*  +refs/pull/*:refs/remotes/origin/pr/* ',
+                                                       url: "${env.ghprbGhRepository}"]
+                                              ]
+                                    ])
+                                }
+                                // Execute run skt
+                                executeInContainer(currentStage, "skt", "ls -la")
+                            }
+                        } catch (e) {
+                            // Set build result
+                            currentBuild.result = 'FAILURE'
+
+                            // Report the exception
+                            echo "Error: Exception from " + currentStage + ":"
+                            echo e.getMessage()
+
+                            // Throw the error
+                            throw e
+
+                        } finally {
+                            currentBuild.displayName = "Build#: ${env.BUILD_NUMBER}"
+                            currentBuild.description = currentBuild.result
                         }
-                        // Execute run skt
-                        executeInContainer(currentStage, "skt", "ls -la")
                     }
-                } catch (e) {
-                    // Set build result
-                    currentBuild.result = 'FAILURE'
-
-                    // Report the exception
-                    echo "Error: Exception from " + currentStage + ":"
-                    echo e.getMessage()
-
-                    // Throw the error
-                    throw e
-
-                } finally {
-                    currentBuild.displayName = "Build#: ${env.BUILD_NUMBER}"
-                    currentBuild.description = currentBuild.result
                 }
             }
         }
-    }
-}
 
 def executeInContainer(String stageName, String containerName, String script) {
     //
