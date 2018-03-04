@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flow-definition plugin="workflow-job@2.17">
+   <actions>
+      <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@1.2.7" />
+      <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@1.2.7">
+         <jobProperties>
+            <string>jenkins.model.BuildDiscarderProperty</string>
+         </jobProperties>
+         <triggers>
+            <string>com.dabsquared.gitlabjenkins.GitLabPushTrigger</string>
+         </triggers>
+         <parameters />
+      </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+   </actions>
+   <description />
+   <keepDependencies>false</keepDependencies>
+   <properties>
+      <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+         <triggers>
+            <com.dabsquared.gitlabjenkins.GitLabPushTrigger plugin="gitlab-plugin@1.5.3">
+               <spec />
+               <triggerOnPush>true</triggerOnPush>
+               <triggerOnMergeRequest>true</triggerOnMergeRequest>
+               <triggerOnPipelineEvent>false</triggerOnPipelineEvent>
+               <triggerOnAcceptedMergeRequest>false</triggerOnAcceptedMergeRequest>
+               <triggerOnClosedMergeRequest>false</triggerOnClosedMergeRequest>
+               <triggerOnApprovedMergeRequest>false</triggerOnApprovedMergeRequest>
+               <triggerOpenMergeRequestOnPush>never</triggerOpenMergeRequestOnPush>
+               <triggerOnNoteRequest>true</triggerOnNoteRequest>
+               <noteRegex>.*\[test\].*</noteRegex>
+               <ciSkip>true</ciSkip>
+               <skipWorkInProgressMergeRequest>true</skipWorkInProgressMergeRequest>
+               <setBuildDescription>true</setBuildDescription>
+            </com.dabsquared.gitlabjenkins.GitLabPushTrigger>
+         </triggers>
+      </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <jenkins.model.BuildDiscarderProperty>
+         <strategy class="hudson.tasks.LogRotator">
+            <daysToKeep>-1</daysToKeep>
+            <numToKeep>15</numToKeep>
+            <artifactDaysToKeep>-1</artifactDaysToKeep>
+            <artifactNumToKeep>-1</artifactNumToKeep>
+         </strategy>
+      </jenkins.model.BuildDiscarderProperty>
+      <io.fabric8.jenkins.openshiftsync.BuildConfigProjectProperty plugin="openshift-sync@1.0.7">
+         <uid />
+         <namespace />
+         <name />
+         <resourceVersion />
+      </io.fabric8.jenkins.openshiftsync.BuildConfigProjectProperty>
+      <com.dabsquared.gitlabjenkins.connection.GitLabConnectionProperty plugin="gitlab-plugin@1.5.3">
+         <gitLabConnection>gitlab</gitLabConnection>
+      </com.dabsquared.gitlabjenkins.connection.GitLabConnectionProperty>
+      <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.27">
+         <autoRebuild>false</autoRebuild>
+         <rebuildDisabled>false</rebuildDisabled>
+      </com.sonyericsson.rebuild.RebuildSettings>
+   </properties>
+   <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps@2.45">
+      <scm class="hudson.plugins.git.GitSCM" plugin="git@3.8.0">
+         <configVersion>2</configVersion>
+         <userRemoteConfigs>
+            <hudson.plugins.git.UserRemoteConfig>
+               <name>origin</name>
+               <url>${gitlabSourceRepoHttpUrl}</url>
+            </hudson.plugins.git.UserRemoteConfig>
+            <hudson.plugins.git.UserRemoteConfig>
+               <name>upstream</name>
+               <url>https://gitlab.cee.redhat.com/contra/downstream-rhel8-pipeline.git</url>
+            </hudson.plugins.git.UserRemoteConfig>
+         </userRemoteConfigs>
+         <branches>
+            <hudson.plugins.git.BranchSpec>
+               <name>${gitlabMergeRequestLastCommit}</name>
+            </hudson.plugins.git.BranchSpec>
+         </branches>
+         <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+         <submoduleCfg class="list" />
+         <extensions>
+            <hudson.plugins.git.extensions.impl.ChangelogToBranch>
+               <options>
+                  <compareRemote>upstream</compareRemote>
+                  <compareTarget>master</compareTarget>
+               </options>
+            </hudson.plugins.git.extensions.impl.ChangelogToBranch>
+         </extensions>
+      </scm>
+      <scriptPath>JenkinsfileStageTrigger</scriptPath>
+      <lightweight>false</lightweight>
+   </definition>
+   <triggers />
+   <disabled>false</disabled>
+</flow-definition>
