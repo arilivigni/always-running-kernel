@@ -1,11 +1,12 @@
-env.ghprbGhRepository = env.ghprbGhRepository ?: 'arilivigni/always-running-kernel'
+env.ghprbGhRepository = env.ghprbGhRepository ?: 'http://git.engineering.redhat.com/git/users/nkondras/skt.git'
 env.ghprbActualCommit = env.ghprbActualCommit ?: 'master'
 env.ghprbPullAuthorLogin = env.ghprbPullAuthorLogin ?: ''
 
 // Needed for podTemplate()
 env.SKT_TAG = env.SKT_TAG ?: 'stable'
+env.SLAVE_TAG = env.SLAVE_TAG ?: 'stable'
 
-env.DOCKER_REPO_URL = env.DOCKER_REPO_URL ?: '172.30.254.79:5000'
+env.DOCKER_REPO_URL = env.DOCKER_REPO_URL ?: 'docker-registry.default.svc:5000'
 env.OPENSHIFT_NAMESPACE = env.OPENSHIFT_NAMESPACE ?: 'continuous-infra'
 env.OPENSHIFT_SERVICE_ACCOUNT = env.OPENSHIFT_SERVICE_ACCOUNT ?: 'jenkins'
 def sktrc
@@ -14,13 +15,15 @@ def cfgfile = "kconf"
 def rcfile = "sktrc"
 
 properties([
-        parameters([
-                string(defaultValue: 'git://git.app.eng.bos.redhat.com/rhel7.git', description: 'base repo url', name: 'baserepo'),
-                string(defaultValue: 'master', description: 'base repo ref', name: 'ref'),
-                string(defaultValue: 'http://git.engineering.redhat.com/git/users/nkondras/fmk-files.git/plain/kernel-3.10.0-x86_64-debug.config', description: 'URL to fetch kernel config from', name: 'baseconfig'),
-                string(defaultValue: '', description: 'Space separated list of patchwork urls', name: 'patchwork'),
-                string(defaultValue: '', description: 'Additional make arguments', name: 'makeopts'),
-                string(defaultValue: '', description: 'Comma separated list of emails to send reports to', name: 'emails')])
+        parameters(
+                [
+                        string(defaultValue: 'stable', description: 'Tag for slave image', name: 'SLAVE_TAG'),
+                        string(defaultValue: 'stable', description: 'Tag for rpmbuild-rhel image', name: 'SKT_TAG'),
+                        string(defaultValue: 'docker-registry.default.svc:5000', description: 'Docker repo url for Openshift instance', name: 'DOCKER_REPO_URL'),
+                        string(defaultValue: 'continuous-infra', description: 'Project namespace for Openshift operations', name: 'OPENSHIFT_NAMESPACE'),
+                        string(defaultValue: 'jenkins', description: 'Service Account for Openshift operations', name: 'OPENSHIFT_SERVICE_ACCOUNT'),
+                ]
+        )
 ])
 
 
@@ -66,8 +69,8 @@ podTemplate(name: podName,
                     stage(currentStage) {
 
                         // SCM
-                        dir('ci-pipeline') {
-                            // Checkout our ci-pipeline repo based on the value of env.ghprbActualCommit
+                        dir('skt') {
+                            // Checkout out skt
                             checkout([$class: 'GitSCM', branches: [[name: env.ghprbActualCommit]],
                                       doGenerateSubmoduleConfigurations: false,
                                       extensions                       : [],
@@ -75,13 +78,12 @@ podTemplate(name: podName,
                                       userRemoteConfigs                : [
                                               [refspec:
                                                        '+refs/heads/*:refs/remotes/origin/*  +refs/pull/*:refs/remotes/origin/pr/* ',
-                                               url: "https://github.com/${env.ghprbGhRepository}"]
+                                               url: "${env.ghprbGhRepository}"]
                                       ]
                             ])
                         }
-                        sh '''
-                            ./skt --help
-                        '''
+                        // Execute run skt
+                        executeInContainer(currentStage, "skt", "ls -la")
                     }
                 } catch (e) {
                     // Set build result
@@ -100,5 +102,25 @@ podTemplate(name: podName,
                 }
             }
         }
+    }
+}
+
+def executeInContainer(String stageName, String containerName, String script) {
+    //
+    // Kubernetes plugin does not let containers inherit
+    // env vars from host. We force them in.
+    //
+    containerEnv = env.getEnvironment().collect { key, value -> return key+'='+value }
+    sh "mkdir -p ${stageName}"
+    try {
+        withEnv(containerEnv) {
+            container(containerName) {
+                sh script
+            }
+        }
+    } catch (err) {
+        throw err
+    } finally {
+        sh "mv -vf logs ${stageName}/logs || true"
     }
 }
