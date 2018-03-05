@@ -54,7 +54,7 @@ The files under this directory contain the Dockerfiles and Jenkins s2i templates
   * Checks out latest master branch skt
   * Runs python ./skt/skt.py --help
   * Can grab logs back from the container if they exist
-  * Repot sucess or failure
+  * Report sucess or failure
   
 ## Notes
   * Jenkins master template and config require a persistent volume of 1gi or higher (100gi preferred)
