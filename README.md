@@ -48,7 +48,7 @@ The files under this directory contain the Dockerfiles and Jenkins s2i templates
  * s2i template - skt-template.yml
     * Openshift skt template to define building the container in Openshift
 
-## Jenkinsfile
+## Jenkins 2.0 Pipeline - Jenkinsfile
   * Create the podTemplate to use when creating a Kubernetes pod
   * Create the containers that will be run in the pipeline (jnlp not needed but included)
   * Checks out latest master branch skt
