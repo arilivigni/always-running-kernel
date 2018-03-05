@@ -1,8 +1,6 @@
 import java.util.logging.Logger
 import jenkins.security.s2m.*
 import jenkins.model.*;
-import com.redhat.jenkins.plugins.ci.*
-import com.redhat.jenkins.plugins.ci.messaging.*
 import hudson.markup.RawHtmlMarkupFormatter
 import hudson.model.*
 import hudson.security.*
